@@ -425,6 +425,44 @@
     color: var(--text-muted);
     margin-bottom: 10px;
   }
+
+  /* ── SORT CONTROL ── */
+  .sort-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .sort-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; flex-shrink: 0; }
+  .sort-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    cursor: pointer;
+  }
+  .sort-select:focus { border-color: var(--accent); }
+
+  /* ── MARK VISITED BUTTON ON CARD ── */
+  .mark-visited-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(90,138,106,0.12);
+    border: 1px solid rgba(90,138,106,0.3);
+    border-radius: 20px;
+    color: var(--green);
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .mark-visited-btn:active { background: rgba(90,138,106,0.25); }
+
+  /* ── AGO LABEL ── */
+  .rest-ago { font-size: 0.7rem; color: var(--accent2); font-weight: 500; }
   .count-badge {
     display: inline-block;
     background: var(--surface2);
@@ -508,6 +546,15 @@
       <button class="pill" onclick="setFilter('visited', this)">Visited</button>
       <button class="pill" onclick="setFilter('wishlist', this)">Wishlist</button>
       <button class="pill" onclick="setFilter('5star', this)">⭐ 5-Star</button>
+    </div>
+    <div class="sort-row">
+      <span class="sort-label">Sort</span>
+      <select class="sort-select" id="sort-select" onchange="setSort(this.value)">
+        <option value="date_desc">Date ↓ newest</option>
+        <option value="date_asc">Date ↑ oldest</option>
+        <option value="rating_desc">Rating ↓ best</option>
+        <option value="name_asc">Name A–Z</option>
+      </select>
     </div>
     <p class="section-label">All Places <span class="count-badge" id="history-count">0</span></p>
     <div id="history-list"><div class="spinner"></div></div>
@@ -627,6 +674,7 @@ let editStatus = 'visited';
 let editId = null;
 let currentFilter = 'all';
 let currentSearch = '';
+let currentSort = 'date_desc';
 let pendingImport = [];
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -688,6 +736,10 @@ async function loadData() {
     .order('last_visited', { ascending: false, nullsFirst: false });
   if (error) { showToast('Load error: ' + error.message); return; }
   restaurants = data || [];
+  // default add-date to today on first load
+  if (!document.getElementById('add-date').value) {
+    document.getElementById('add-date').value = new Date().toISOString().split('T')[0];
+  }
   render();
 }
 
@@ -712,7 +764,7 @@ function renderDiscover() {
     el.innerHTML = `<div class="empty-state"><p>🗺️</p><p>No wishlist entries yet.<br>Add places you want to try!</p></div>`;
     return;
   }
-  el.innerHTML = wishlist.map(r => cardHTML(r)).join('');
+  el.innerHTML = wishlist.map(r => cardHTML(r, true)).join('');
 }
 
 // ─── HISTORY ─────────────────────────────────────────────────────────────────
@@ -725,31 +777,75 @@ function renderHistory() {
     const q = currentSearch.toLowerCase();
     filtered = filtered.filter(r => r.name.toLowerCase().includes(q) || (r.notes || '').toLowerCase().includes(q));
   }
+  filtered = sortRestaurants(filtered);
   document.getElementById('history-count').textContent = filtered.length;
   const el = document.getElementById('history-list');
   if (filtered.length === 0) {
     el.innerHTML = `<div class="empty-state"><p>🍽️</p><p>Nothing matches your search.</p></div>`;
     return;
   }
-  el.innerHTML = filtered.map(r => cardHTML(r)).join('');
+  el.innerHTML = filtered.map(r => cardHTML(r, false)).join('');
 }
 
-function cardHTML(r) {
+function timeAgo(dateStr) {
+  if (!dateStr) return null;
+  const then = new Date(dateStr + 'T12:00:00');
+  const now = new Date();
+  const days = Math.floor((now - then) / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 14) return `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 8) return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+  const months = Math.floor(days / 30.4);
+  if (months < 24) return `${months} month${months > 1 ? 's' : ''} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years > 1 ? 's' : ''} ago`;
+}
+
+function cardHTML(r, showMarkVisited = false) {
   const stars = r.rating ? '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating) : '—';
+  const ago = r.last_visited ? timeAgo(r.last_visited) : null;
   const date = r.last_visited ? new Date(r.last_visited + 'T12:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : 'No date';
   const badge = r.status === 'visited'
     ? `<span class="rest-badge badge-visited">Visited</span>`
     : `<span class="rest-badge badge-wishlist">Wishlist</span>`;
   const notes = r.notes ? `<div class="rest-notes">${escHtml(r.notes)}</div>` : '';
+  const agoLabel = ago ? `<span class="rest-ago">${ago}</span>` : '';
+  const markBtn = showMarkVisited
+    ? `<button class="mark-visited-btn" onclick="event.stopPropagation();markVisited('${r.id}')">✓ Mark visited</button>`
+    : '';
   return `<div class="rest-card" onclick='openEdit(${JSON.stringify(r)})'>
     <div class="rest-card-top">
       <div class="rest-name">${escHtml(r.name)}</div>${badge}
     </div>
     <div class="rest-meta">
       <span class="rest-rating">${stars}</span>
-      <span class="rest-date">${date}</span>
-    </div>${notes}
+      ${agoLabel || `<span class="rest-date">${date}</span>`}
+      ${ago && r.last_visited ? `<span class="rest-date" title="${date}"> · ${date}</span>` : ''}
+    </div>${notes}${markBtn}
   </div>`;
+}
+
+function sortRestaurants(list) {
+  return [...list].sort((a, b) => {
+    if (currentSort === 'date_desc') {
+      if (!a.last_visited && !b.last_visited) return 0;
+      if (!a.last_visited) return 1;
+      if (!b.last_visited) return -1;
+      return new Date(b.last_visited) - new Date(a.last_visited);
+    } else if (currentSort === 'date_asc') {
+      if (!a.last_visited && !b.last_visited) return 0;
+      if (!a.last_visited) return 1;
+      if (!b.last_visited) return -1;
+      return new Date(a.last_visited) - new Date(b.last_visited);
+    } else if (currentSort === 'rating_desc') {
+      return (b.rating || 0) - (a.rating || 0);
+    } else if (currentSort === 'name_asc') {
+      return a.name.localeCompare(b.name);
+    }
+    return 0;
+  });
 }
 
 function setFilter(f, btn) {
@@ -759,9 +855,11 @@ function setFilter(f, btn) {
   renderHistory();
 }
 function filterHistory(v) { currentSearch = v; renderHistory(); }
+function setSort(v) { currentSort = v; renderHistory(); }
 
 // ─── DECISION HELPER ─────────────────────────────────────────────────────────
 function decide(mode) {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
   let pool = [];
   if (mode === 'faithful') pool = restaurants.filter(r => r.rating === 5 && r.status === 'visited');
   else if (mode === 'overdue') {
@@ -773,7 +871,10 @@ function decide(mode) {
     pool = visited.length ? [visited[0]] : [];
   }
   else if (mode === 'adventure') pool = restaurants.filter(r => r.status === 'wishlist');
-  else if (mode === 'wildcard') pool = [...restaurants];
+  else if (mode === 'wildcard') {
+    pool = restaurants.filter(r => !r.last_visited || r.last_visited < thirtyDaysAgo);
+    if (!pool.length) pool = [...restaurants]; // fallback if everything is recent
+  }
 
   const el = document.getElementById('decision-result');
   if (!pool.length) {
@@ -782,9 +883,10 @@ function decide(mode) {
   }
   const pick = pool[Math.floor(Math.random() * pool.length)];
   const stars = pick.rating ? '★'.repeat(pick.rating) : '';
-  const date = pick.last_visited ? ' · Last visited ' + new Date(pick.last_visited + 'T12:00:00').toLocaleDateString('en-US', {month:'short', year:'numeric'}) : '';
+  const ago = pick.last_visited ? timeAgo(pick.last_visited) : null;
+  const dateLabel = ago ? ` · ${ago}` : '';
   el.innerHTML = `<div class="result-name">${escHtml(pick.name)}</div>
-    <div class="result-meta">${stars}${date}${pick.notes ? ' · ' + escHtml(pick.notes.substring(0,60)) + (pick.notes.length > 60 ? '…' : '') : ''}</div>`;
+    <div class="result-meta">${stars}${dateLabel}${pick.notes ? ' · ' + escHtml(pick.notes.substring(0,60)) + (pick.notes.length > 60 ? '…' : '') : ''}</div>`;
   el.classList.add('show');
 }
 
@@ -795,10 +897,24 @@ function setStatus(s) {
   document.getElementById('status-wishlist').className = 'status-btn' + (s==='wishlist' ? ' active-wishlist' : '');
   document.getElementById('rating-section').style.display = s === 'visited' ? 'block' : 'none';
   document.getElementById('date-section').style.display = s === 'visited' ? 'block' : 'none';
+  // default date to today when switching to visited
+  if (s === 'visited' && !document.getElementById('add-date').value) {
+    document.getElementById('add-date').value = new Date().toISOString().split('T')[0];
+  }
 }
 function setRating(v) {
   addRating = v;
   document.querySelectorAll('#star-row .star-btn').forEach(b => b.classList.toggle('lit', +b.dataset.v <= v));
+}
+async function markVisited(id) {
+  const today = new Date().toISOString().split('T')[0];
+  const { error } = await supabase_client.from('restaurants').update({
+    status: 'visited',
+    last_visited: today
+  }).eq('id', id);
+  if (error) { showToast('Error: ' + error.message); return; }
+  showToast('Marked as visited ✓');
+  await loadData();
 }
 async function submitAdd() {
   const name = document.getElementById('add-name').value.trim();
@@ -815,7 +931,7 @@ async function submitAdd() {
   showToast('Added ' + name + ' ✓');
   document.getElementById('add-name').value = '';
   document.getElementById('add-notes').value = '';
-  document.getElementById('add-date').value = '';
+  document.getElementById('add-date').value = new Date().toISOString().split('T')[0];
   addRating = 0; addStatus = 'visited';
   setStatus('visited');
   document.querySelectorAll('#star-row .star-btn').forEach(b => b.classList.remove('lit'));
