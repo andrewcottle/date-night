@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Date Night">
+<link rel="manifest" id="pwa-manifest">
+<title>Date Night</title>
+
+<!-- Supabase JS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:        #120808;
+    --surface:   #1e0f0f;
+    --surface2:  #2a1515;
+    --border:    #3d1f1f;
+    --accent:    #c9624a;
+    --accent2:   #e8956d;
+    --gold:      #d4a853;
+    --text:      #f0e8e0;
+    --text-muted:#9a8070;
+    --green:     #5a8a6a;
+    --radius:    14px;
+    --shadow:    0 4px 24px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    overscroll-behavior: none;
+  }
+
+  /* ── CONFIG SCREEN ── */
+  #config-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 24px;
+    z-index: 100;
+  }
+  #config-screen h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.2rem;
+    font-style: italic;
+    color: var(--accent2);
+    margin-bottom: 8px;
+  }
+  #config-screen p { color: var(--text-muted); text-align: center; margin-bottom: 32px; line-height: 1.6; }
+  .config-form { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 14px; }
+  .config-form label { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; display: block; }
+  .config-form input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 12px 14px;
+    font-size: 0.85rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+  }
+  .config-form input:focus { border-color: var(--accent); }
+  .config-note { font-size: 0.72rem; color: var(--text-muted); line-height: 1.5; text-align: center; margin-top: 4px; }
+  .config-note a { color: var(--accent2); }
+
+  /* ── LAYOUT ── */
+  #app { display: none; flex-direction: column; height: 100%; max-width: 480px; margin: 0 auto; }
+
+  /* ── HEADER ── */
+  .app-header {
+    padding: 52px 20px 16px;
+    background: linear-gradient(180deg, #1a0505 0%, var(--bg) 100%);
+    flex-shrink: 0;
+  }
+  .app-header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.7rem;
+    font-style: italic;
+    color: var(--accent2);
+    letter-spacing: -0.01em;
+  }
+  .app-header p { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 20px 0;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    padding: 10px 0;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    margin-bottom: -1px;
+  }
+  .tab-btn.active { color: var(--accent2); border-color: var(--accent2); }
+
+  /* ── SCROLL PANE ── */
+  .pane { display: none; flex: 1; overflow-y: auto; padding: 20px; }
+  .pane.active { display: block; }
+
+  /* ── DECISION HELPER ── */
+  .decision-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+  .decision-bar h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.85rem;
+    color: var(--gold);
+    margin-bottom: 10px;
+    font-style: italic;
+  }
+  .decision-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .decision-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 10px 8px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    line-height: 1.4;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .decision-btn:hover, .decision-btn:active { background: var(--border); border-color: var(--accent); }
+  .decision-btn .btn-icon { font-size: 1.1rem; display: block; margin-bottom: 3px; }
+  .decision-result {
+    margin-top: 12px;
+    background: linear-gradient(135deg, var(--surface2), #2d1a10);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .decision-result.show { display: block; }
+  .decision-result .result-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    font-style: italic;
+    color: var(--accent2);
+  }
+  .decision-result .result-meta { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
+
+  /* ── SEARCH BAR ── */
+  .search-wrap { position: relative; margin-bottom: 14px; }
+  .search-wrap input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 10px 14px 10px 36px;
+    font-size: 0.85rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.9rem; pointer-events: none; }
+
+  /* ── RESTAURANT CARD ── */
+  .rest-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+  .rest-card:hover { border-color: var(--accent); background: var(--surface2); }
+  .rest-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .rest-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.05rem;
+    font-style: italic;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .rest-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .badge-visited { background: rgba(90,138,106,0.2); color: var(--green); border: 1px solid rgba(90,138,106,0.3); }
+  .badge-wishlist { background: rgba(201,98,74,0.15); color: var(--accent2); border: 1px solid rgba(201,98,74,0.25); }
+  .rest-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+  .rest-rating { color: var(--gold); font-size: 0.8rem; letter-spacing: 0.05em; }
+  .rest-date { font-size: 0.72rem; color: var(--text-muted); }
+  .rest-notes { font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; line-height: 1.4; font-style: italic; border-top: 1px solid var(--border); padding-top: 6px; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+  .empty-state p:first-child { font-size: 2rem; margin-bottom: 10px; }
+  .empty-state p { font-size: 0.85rem; line-height: 1.6; }
+
+  /* ── FORM ── */
+  .form-section { margin-bottom: 20px; }
+  .form-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .form-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 11px 14px;
+    font-size: 0.9rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  textarea.form-input { resize: vertical; min-height: 72px; line-height: 1.5; }
+
+  .status-toggle { display: flex; gap: 8px; }
+  .status-btn {
+    flex: 1;
+    padding: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .status-btn.active-visited { background: rgba(90,138,106,0.15); border-color: var(--green); color: var(--green); }
+  .status-btn.active-wishlist { background: rgba(201,98,74,0.15); border-color: var(--accent); color: var(--accent2); }
+
+  .star-row { display: flex; gap: 8px; margin-top: 2px; }
+  .star-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--border); transition: color 0.1s, transform 0.1s; }
+  .star-btn.lit { color: var(--gold); }
+  .star-btn:active { transform: scale(1.3); }
+
+  /* ── BUTTONS ── */
+  .btn-primary {
+    width: 100%;
+    background: var(--accent);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    padding: 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn-primary:active { background: #b05540; transform: scale(0.98); }
+  .btn-secondary {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-muted);
+    padding: 11px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    font-family: 'DM Sans', sans-serif;
+    margin-top: 8px;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent2); }
+  .btn-danger {
+    background: transparent;
+    border: 1px solid #6b2525;
+    border-radius: 12px;
+    color: #c06060;
+    padding: 11px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    width: 100%;
+    margin-top: 8px;
+    transition: background 0.15s;
+  }
+  .btn-danger:hover { background: rgba(192,96,96,0.1); }
+
+  /* ── CSV IMPORT ── */
+  .import-box {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .import-box:hover { border-color: var(--accent); }
+  .import-box input[type="file"] { display: none; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,4,4,0.8);
+    backdrop-filter: blur(4px);
+    z-index: 50;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+    animation: fadeIn 0.2s ease;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 24px 20px 40px;
+    animation: slideUp 0.25s ease;
+  }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
+  .modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    font-style: italic;
+    color: var(--accent2);
+    margin-bottom: 20px;
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 10px 20px;
+    font-size: 0.82rem;
+    color: var(--text);
+    z-index: 200;
+    transition: transform 0.3s ease;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── LOADING ── */
+  .spinner {
+    width: 22px; height: 22px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin: 40px auto;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* ── FILTER PILLS ── */
+  .filter-row { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .pill {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .count-badge {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    color: var(--text-muted);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<!-- CONFIG / SETUP SCREEN -->
+<div id="config-screen">
+  <h1>Date Night 🍷</h1>
+  <p>Enter your Supabase credentials to get started.<br>These are saved locally on this device.</p>
+  <div class="config-form">
+    <div>
+      <label>Supabase Project URL</label>
+      <input type="url" id="cfg-url" placeholder="https://xxxx.supabase.co">
+    </div>
+    <div>
+      <label>Supabase Anon Key</label>
+      <input type="text" id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIs...">
+    </div>
+    <button class="btn-primary" onclick="saveConfig()">Connect →</button>
+    <p class="config-note">Find these in your Supabase project under<br><strong>Settings → API</strong>. Keys are stored only in your browser's localStorage.<br><a href="https://supabase.com" target="_blank">Create a free Supabase project →</a></p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div class="app-header">
+    <h1>Date Night 🍷</h1>
+    <p id="header-sub">Loading…</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('discover')">Discover</button>
+    <button class="tab-btn" onclick="switchTab('history')">History</button>
+    <button class="tab-btn" onclick="switchTab('add')">+ Add</button>
+    <button class="tab-btn" onclick="switchTab('import')">Import</button>
+  </div>
+
+  <!-- DISCOVER TAB -->
+  <div class="pane active" id="pane-discover">
+    <div class="decision-bar">
+      <h3>✨ Where should we go?</h3>
+      <div class="decision-btns">
+        <button class="decision-btn" onclick="decide('faithful')">
+          <span class="btn-icon">⭐</span>Old Faithful<br><small style="color:var(--text-muted)">5-star fave</small>
+        </button>
+        <button class="decision-btn" onclick="decide('overdue')">
+          <span class="btn-icon">📅</span>Long Overdue<br><small style="color:var(--text-muted)">Oldest visit</small>
+        </button>
+        <button class="decision-btn" onclick="decide('adventure')">
+          <span class="btn-icon">🗺️</span>New Adventure<br><small style="color:var(--text-muted)">Random wishlist</small>
+        </button>
+        <button class="decision-btn" onclick="decide('wildcard')">
+          <span class="btn-icon">🎲</span>Wildcard<br><small style="color:var(--text-muted)">Total surprise</small>
+        </button>
+      </div>
+      <div class="decision-result" id="decision-result"></div>
+    </div>
+
+    <p class="section-label">Wishlist <span class="count-badge" id="wishlist-count">0</span></p>
+    <div id="wishlist-list"><div class="spinner"></div></div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="pane" id="pane-history">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="search" placeholder="Search restaurants…" oninput="filterHistory(this.value)" id="search-input">
+    </div>
+    <div class="filter-row">
+      <button class="pill active" onclick="setFilter('all', this)">All</button>
+      <button class="pill" onclick="setFilter('visited', this)">Visited</button>
+      <button class="pill" onclick="setFilter('wishlist', this)">Wishlist</button>
+      <button class="pill" onclick="setFilter('5star', this)">⭐ 5-Star</button>
+    </div>
+    <p class="section-label">All Places <span class="count-badge" id="history-count">0</span></p>
+    <div id="history-list"><div class="spinner"></div></div>
+  </div>
+
+  <!-- ADD TAB -->
+  <div class="pane" id="pane-add">
+    <div class="form-section">
+      <label class="form-label">Restaurant Name *</label>
+      <input class="form-input" type="text" id="add-name" placeholder="Name of the place…">
+    </div>
+    <div class="form-section">
+      <label class="form-label">Status</label>
+      <div class="status-toggle">
+        <button class="status-btn active-visited" id="status-visited" onclick="setStatus('visited')">✓ Visited</button>
+        <button class="status-btn" id="status-wishlist" onclick="setStatus('wishlist')">♡ Wishlist</button>
+      </div>
+    </div>
+    <div class="form-section" id="rating-section">
+      <label class="form-label">Rating</label>
+      <div class="star-row" id="star-row">
+        <button class="star-btn" data-v="1" onclick="setRating(1)">★</button>
+        <button class="star-btn" data-v="2" onclick="setRating(2)">★</button>
+        <button class="star-btn" data-v="3" onclick="setRating(3)">★</button>
+        <button class="star-btn" data-v="4" onclick="setRating(4)">★</button>
+        <button class="star-btn" data-v="5" onclick="setRating(5)">★</button>
+      </div>
+    </div>
+    <div class="form-section" id="date-section">
+      <label class="form-label">Last Visited <small style="color:var(--text-muted)">(leave blank for backlog)</small></label>
+      <input class="form-input" type="date" id="add-date">
+    </div>
+    <div class="form-section">
+      <label class="form-label">Notes <small style="color:var(--text-muted)">(optional)</small></label>
+      <textarea class="form-input" id="add-notes" placeholder="Great for anniversaries, loud but fun, must try the pasta…"></textarea>
+    </div>
+    <button class="btn-primary" onclick="submitAdd()">Add Restaurant</button>
+  </div>
+
+  <!-- IMPORT TAB -->
+  <div class="pane" id="pane-import">
+    <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.6;margin-bottom:20px;">
+      Bulk-import your backlog from a CSV file. Columns should be:<br>
+      <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:0.78rem;color:var(--accent2)">name, status, rating, last_visited, notes</code>
+    </p>
+    <label class="import-box" for="csv-file-input">
+      <input type="file" id="csv-file-input" accept=".csv" onchange="handleCSV(this)">
+      <div style="font-size:2rem;margin-bottom:8px;">📂</div>
+      <div style="font-weight:500;margin-bottom:4px;">Tap to choose a CSV file</div>
+      <div style="font-size:0.72rem;color:var(--text-muted)">visited / wishlist · rating 1–5 · date YYYY-MM-DD</div>
+    </label>
+    <div id="import-preview" style="display:none;">
+      <p class="section-label" id="import-count-label"></p>
+      <div id="import-rows" style="margin-bottom:14px;max-height:300px;overflow-y:auto;"></div>
+      <button class="btn-primary" onclick="confirmImport()">Import All</button>
+      <button class="btn-secondary" onclick="cancelImport()">Cancel</button>
+    </div>
+
+    <div style="margin-top:28px;border-top:1px solid var(--border);padding-top:20px;">
+      <p class="section-label">Settings</p>
+      <button class="btn-secondary" onclick="openSettings()">⚙️ Update Supabase Credentials</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT / DETAIL MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title">Edit</div>
+    <div class="form-section">
+      <label class="form-label">Restaurant Name</label>
+      <input class="form-input" type="text" id="edit-name">
+    </div>
+    <div class="form-section">
+      <label class="form-label">Status</label>
+      <div class="status-toggle">
+        <button class="status-btn" id="edit-status-visited" onclick="setEditStatus('visited')">✓ Visited</button>
+        <button class="status-btn" id="edit-status-wishlist" onclick="setEditStatus('wishlist')">♡ Wishlist</button>
+      </div>
+    </div>
+    <div class="form-section">
+      <label class="form-label">Rating</label>
+      <div class="star-row" id="edit-star-row">
+        <button class="star-btn" data-v="1" onclick="setEditRating(1)">★</button>
+        <button class="star-btn" data-v="2" onclick="setEditRating(2)">★</button>
+        <button class="star-btn" data-v="3" onclick="setEditRating(3)">★</button>
+        <button class="star-btn" data-v="4" onclick="setEditRating(4)">★</button>
+        <button class="star-btn" data-v="5" onclick="setEditRating(5)">★</button>
+      </div>
+    </div>
+    <div class="form-section">
+      <label class="form-label">Last Visited</label>
+      <input class="form-input" type="date" id="edit-date">
+    </div>
+    <div class="form-section">
+      <label class="form-label">Notes</label>
+      <textarea class="form-input" id="edit-notes" placeholder="Great for anniversaries, loud but fun…"></textarea>
+    </div>
+    <button class="btn-primary" onclick="submitEdit()">Save Changes</button>
+    <button class="btn-danger" onclick="deleteEntry()">Delete</button>
+    <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let supabase_client = null;
+let restaurants = [];
+let addRating = 0;
+let addStatus = 'visited';
+let editRating = 0;
+let editStatus = 'visited';
+let editId = null;
+let currentFilter = 'all';
+let currentSearch = '';
+let pendingImport = [];
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+function saveConfig() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if (!url || !key) { showToast('Please enter both URL and key'); return; }
+  localStorage.setItem('dn_url', url);
+  localStorage.setItem('dn_key', key);
+  initApp(url, key);
+}
+
+function openSettings() {
+  document.getElementById('cfg-url').value = localStorage.getItem('dn_url') || '';
+  document.getElementById('cfg-key').value = localStorage.getItem('dn_key') || '';
+  document.getElementById('config-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+async function initApp(url, key) {
+  try {
+    supabase_client = supabase.createClient(url, key);
+    // Test connection + ensure table exists by fetching
+    const { error } = await supabase_client.from('restaurants').select('id').limit(1);
+    if (error && error.code === '42P01') {
+      showToast('Table not found — run the SQL setup first');
+      showSQLHint();
+      return;
+    }
+    if (error) throw error;
+    document.getElementById('config-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    await loadData();
+  } catch(e) {
+    showToast('Connection failed: ' + (e.message || e));
+  }
+}
+
+function showSQLHint() {
+  const el = document.querySelector('.config-note');
+  el.innerHTML = `Run this SQL in your Supabase SQL Editor:<br>
+  <code style="font-size:0.7rem;background:#2a1010;padding:8px;display:block;margin-top:6px;border-radius:6px;text-align:left;line-height:1.6">
+CREATE TABLE restaurants (<br>
+&nbsp;&nbsp;id uuid PRIMARY KEY DEFAULT gen_random_uuid(),<br>
+&nbsp;&nbsp;name text NOT NULL,<br>
+&nbsp;&nbsp;status text NOT NULL DEFAULT 'visited',<br>
+&nbsp;&nbsp;rating int,<br>
+&nbsp;&nbsp;last_visited date,<br>
+&nbsp;&nbsp;notes text,<br>
+&nbsp;&nbsp;created_at timestamptz DEFAULT now()<br>
+);</code>`;
+}
+
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+async function loadData() {
+  const { data, error } = await supabase_client
+    .from('restaurants')
+    .select('*')
+    .order('last_visited', { ascending: false, nullsFirst: false });
+  if (error) { showToast('Load error: ' + error.message); return; }
+  restaurants = data || [];
+  render();
+}
+
+function render() {
+  renderDiscover();
+  renderHistory();
+  updateHeader();
+}
+
+function updateHeader() {
+  const visited = restaurants.filter(r => r.status === 'visited').length;
+  const wishlist = restaurants.filter(r => r.status === 'wishlist').length;
+  document.getElementById('header-sub').textContent = `${visited} visited · ${wishlist} on wishlist`;
+}
+
+// ─── DISCOVER ────────────────────────────────────────────────────────────────
+function renderDiscover() {
+  const wishlist = restaurants.filter(r => r.status === 'wishlist');
+  document.getElementById('wishlist-count').textContent = wishlist.length;
+  const el = document.getElementById('wishlist-list');
+  if (wishlist.length === 0) {
+    el.innerHTML = `<div class="empty-state"><p>🗺️</p><p>No wishlist entries yet.<br>Add places you want to try!</p></div>`;
+    return;
+  }
+  el.innerHTML = wishlist.map(r => cardHTML(r)).join('');
+}
+
+// ─── HISTORY ─────────────────────────────────────────────────────────────────
+function renderHistory() {
+  let filtered = [...restaurants];
+  if (currentFilter === 'visited') filtered = filtered.filter(r => r.status === 'visited');
+  else if (currentFilter === 'wishlist') filtered = filtered.filter(r => r.status === 'wishlist');
+  else if (currentFilter === '5star') filtered = filtered.filter(r => r.rating === 5);
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    filtered = filtered.filter(r => r.name.toLowerCase().includes(q) || (r.notes || '').toLowerCase().includes(q));
+  }
+  document.getElementById('history-count').textContent = filtered.length;
+  const el = document.getElementById('history-list');
+  if (filtered.length === 0) {
+    el.innerHTML = `<div class="empty-state"><p>🍽️</p><p>Nothing matches your search.</p></div>`;
+    return;
+  }
+  el.innerHTML = filtered.map(r => cardHTML(r)).join('');
+}
+
+function cardHTML(r) {
+  const stars = r.rating ? '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating) : '—';
+  const date = r.last_visited ? new Date(r.last_visited + 'T12:00:00').toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : 'No date';
+  const badge = r.status === 'visited'
+    ? `<span class="rest-badge badge-visited">Visited</span>`
+    : `<span class="rest-badge badge-wishlist">Wishlist</span>`;
+  const notes = r.notes ? `<div class="rest-notes">${escHtml(r.notes)}</div>` : '';
+  return `<div class="rest-card" onclick='openEdit(${JSON.stringify(r)})'>
+    <div class="rest-card-top">
+      <div class="rest-name">${escHtml(r.name)}</div>${badge}
+    </div>
+    <div class="rest-meta">
+      <span class="rest-rating">${stars}</span>
+      <span class="rest-date">${date}</span>
+    </div>${notes}
+  </div>`;
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-row .pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  renderHistory();
+}
+function filterHistory(v) { currentSearch = v; renderHistory(); }
+
+// ─── DECISION HELPER ─────────────────────────────────────────────────────────
+function decide(mode) {
+  let pool = [];
+  if (mode === 'faithful') pool = restaurants.filter(r => r.rating === 5 && r.status === 'visited');
+  else if (mode === 'overdue') {
+    const visited = restaurants.filter(r => r.status === 'visited').sort((a,b) => {
+      if (!a.last_visited) return -1;
+      if (!b.last_visited) return 1;
+      return new Date(a.last_visited) - new Date(b.last_visited);
+    });
+    pool = visited.length ? [visited[0]] : [];
+  }
+  else if (mode === 'adventure') pool = restaurants.filter(r => r.status === 'wishlist');
+  else if (mode === 'wildcard') pool = [...restaurants];
+
+  const el = document.getElementById('decision-result');
+  if (!pool.length) {
+    el.innerHTML = `<div class="result-meta">No matches found for this mode yet!</div>`;
+    el.classList.add('show'); return;
+  }
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  const stars = pick.rating ? '★'.repeat(pick.rating) : '';
+  const date = pick.last_visited ? ' · Last visited ' + new Date(pick.last_visited + 'T12:00:00').toLocaleDateString('en-US', {month:'short', year:'numeric'}) : '';
+  el.innerHTML = `<div class="result-name">${escHtml(pick.name)}</div>
+    <div class="result-meta">${stars}${date}${pick.notes ? ' · ' + escHtml(pick.notes.substring(0,60)) + (pick.notes.length > 60 ? '…' : '') : ''}</div>`;
+  el.classList.add('show');
+}
+
+// ─── ADD FORM ─────────────────────────────────────────────────────────────────
+function setStatus(s) {
+  addStatus = s;
+  document.getElementById('status-visited').className = 'status-btn' + (s==='visited' ? ' active-visited' : '');
+  document.getElementById('status-wishlist').className = 'status-btn' + (s==='wishlist' ? ' active-wishlist' : '');
+  document.getElementById('rating-section').style.display = s === 'visited' ? 'block' : 'none';
+  document.getElementById('date-section').style.display = s === 'visited' ? 'block' : 'none';
+}
+function setRating(v) {
+  addRating = v;
+  document.querySelectorAll('#star-row .star-btn').forEach(b => b.classList.toggle('lit', +b.dataset.v <= v));
+}
+async function submitAdd() {
+  const name = document.getElementById('add-name').value.trim();
+  if (!name) { showToast('Please enter a name'); return; }
+  const row = {
+    name,
+    status: addStatus,
+    rating: addStatus === 'visited' ? (addRating || null) : null,
+    last_visited: addStatus === 'visited' ? (document.getElementById('add-date').value || null) : null,
+    notes: document.getElementById('add-notes').value.trim() || null
+  };
+  const { error } = await supabase_client.from('restaurants').insert([row]);
+  if (error) { showToast('Error: ' + error.message); return; }
+  showToast('Added ' + name + ' ✓');
+  document.getElementById('add-name').value = '';
+  document.getElementById('add-notes').value = '';
+  document.getElementById('add-date').value = '';
+  addRating = 0; addStatus = 'visited';
+  setStatus('visited');
+  document.querySelectorAll('#star-row .star-btn').forEach(b => b.classList.remove('lit'));
+  await loadData();
+  switchTab('history');
+}
+
+// ─── EDIT MODAL ───────────────────────────────────────────────────────────────
+function openEdit(r) {
+  editId = r.id;
+  editRating = r.rating || 0;
+  editStatus = r.status;
+  document.getElementById('modal-title').textContent = r.name;
+  document.getElementById('edit-name').value = r.name;
+  document.getElementById('edit-date').value = r.last_visited || '';
+  document.getElementById('edit-notes').value = r.notes || '';
+  setEditStatus(r.status);
+  setEditRating(r.rating || 0);
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function setEditStatus(s) {
+  editStatus = s;
+  document.getElementById('edit-status-visited').className = 'status-btn' + (s==='visited' ? ' active-visited' : '');
+  document.getElementById('edit-status-wishlist').className = 'status-btn' + (s==='wishlist' ? ' active-wishlist' : '');
+}
+function setEditRating(v) {
+  editRating = v;
+  document.querySelectorAll('#edit-star-row .star-btn').forEach(b => b.classList.toggle('lit', +b.dataset.v <= v));
+}
+async function submitEdit() {
+  const name = document.getElementById('edit-name').value.trim();
+  if (!name) { showToast('Name required'); return; }
+  const { error } = await supabase_client.from('restaurants').update({
+    name,
+    status: editStatus,
+    rating: editRating || null,
+    last_visited: document.getElementById('edit-date').value || null,
+    notes: document.getElementById('edit-notes').value.trim() || null
+  }).eq('id', editId);
+  if (error) { showToast('Error: ' + error.message); return; }
+  showToast('Saved ✓');
+  closeModal();
+  await loadData();
+}
+async function deleteEntry() {
+  if (!confirm('Delete this entry?')) return;
+  const { error } = await supabase_client.from('restaurants').delete().eq('id', editId);
+  if (error) { showToast('Error: ' + error.message); return; }
+  showToast('Deleted');
+  closeModal();
+  await loadData();
+}
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ─── CSV IMPORT ───────────────────────────────────────────────────────────────
+function handleCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(Boolean);
+    const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      const row = {};
+      headers.forEach((h, idx) => row[h] = vals[idx] || '');
+      if (!row.name) continue;
+      rows.push({
+        name: row.name,
+        status: (row.status || 'visited').toLowerCase().includes('wish') ? 'wishlist' : 'visited',
+        rating: parseInt(row.rating) || null,
+        last_visited: row.last_visited || null,
+        notes: row.notes || null
+      });
+    }
+    pendingImport = rows;
+    showImportPreview(rows);
+  };
+  reader.readAsText(file);
+}
+function showImportPreview(rows) {
+  document.getElementById('import-count-label').textContent = `Preview — ${rows.length} entries`;
+  document.getElementById('import-rows').innerHTML = rows.slice(0, 20).map(r =>
+    `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:0.78rem">
+      <strong>${escHtml(r.name)}</strong>
+      <span style="color:var(--text-muted);margin-left:8px">${r.status} · ${r.rating ? '★'.repeat(r.rating) : 'no rating'} · ${r.last_visited || 'no date'}</span>
+      ${r.notes ? `<div style="color:var(--text-muted);font-style:italic;margin-top:2px">${escHtml(r.notes.substring(0,50))}</div>` : ''}
+    </div>`
+  ).join('') + (rows.length > 20 ? `<div style="color:var(--text-muted);font-size:0.75rem;text-align:center;padding:8px">...and ${rows.length - 20} more</div>` : '');
+  document.getElementById('import-preview').style.display = 'block';
+}
+async function confirmImport() {
+  if (!pendingImport.length) return;
+  const { error } = await supabase_client.from('restaurants').insert(pendingImport);
+  if (error) { showToast('Import error: ' + error.message); return; }
+  showToast(`Imported ${pendingImport.length} entries ✓`);
+  cancelImport();
+  await loadData();
+  switchTab('history');
+}
+function cancelImport() {
+  pendingImport = [];
+  document.getElementById('import-preview').style.display = 'none';
+  document.getElementById('csv-file-input').value = '';
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['discover','history','add','import'][i] === name);
+  });
+  document.querySelectorAll('.pane').forEach((p,i) => {
+    p.classList.toggle('active', ['pane-discover','pane-history','pane-add','pane-import'][i] === 'pane-'+name);
+  });
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ─── PWA MANIFEST (injected dynamically) ────────────────────────────────────
+const manifest = {
+  name: 'Date Night',
+  short_name: 'Date Night',
+  start_url: '.',
+  display: 'standalone',
+  background_color: '#120808',
+  theme_color: '#1a0a0a',
+  icons: [{ src: 'https://api.dicebear.com/7.x/icons/svg?seed=wineglasses&backgroundColor=1a0808', sizes: '192x192', type: 'image/svg+xml' }]
+};
+const blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+document.getElementById('pwa-manifest').href = URL.createObjectURL(blob);
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+(function boot() {
+  const url = localStorage.getItem('dn_url');
+  const key = localStorage.getItem('dn_key');
+  if (url && key) {
+    document.getElementById('cfg-url').value = url;
+    document.getElementById('cfg-key').value = key;
+    initApp(url, key);
+  }
+})();
+</script>
+</body>
+</html>
